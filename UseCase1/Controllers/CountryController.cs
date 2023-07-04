@@ -15,7 +15,7 @@ public class CountryController : ControllerBase {
   }
 
   [HttpGet]
-  public async Task<IActionResult> Get(string? countryName, long? population, SortOrder? sort, int? firstRows) {
+  public async Task<IActionResult> Get(string? countryName, int? population, SortOrder? sort, int? firstCountries) {
     var response = await _client.GetAsync("https://restcountries.com/v3.1/all");
 
     if (!response.IsSuccessStatusCode) {
@@ -44,8 +44,8 @@ public class CountryController : ControllerBase {
     }
 
     // Select first rows
-    if (firstRows.HasValue) {
-      countries = countries.Take(firstRows.Value).ToList();
+    if (firstCountries.HasValue) {
+      countries = SelectCountries(countries, firstCountries.Value);
     }
 
     return Ok(countries);
@@ -68,5 +68,9 @@ public class CountryController : ControllerBase {
     };
 
     return countries;
+  }
+
+  private static List<Country> SelectCountries(List<Country> countries, int firstCountries) {
+    return countries.Take(firstCountries).ToList();
   }
 }
