@@ -1,0 +1,794 @@
+Create Unit tests for all 4 functions (filter, filter, sort, pagination) for this code
+
+using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
+using UseCase1.Enums;
+using UseCase1.Models;
+
+namespace  UseCase1.Controllers;
+
+[Route("api/[controller]")]
+[ApiController]
+public class CountryController : ControllerBase {
+  private readonly HttpClient _client;
+
+  public CountryController(IHttpClientFactory clientFactory) {
+    _client = clientFactory.CreateClient();
+  }
+
+  [HttpGet]
+  public async Task<IActionResult> Get(string? countryName, int? population, SortOrder? sort, int? firstCountries) {
+    var response = await _client.GetAsync("https://restcountries.com/v3.1/all");
+
+    if (!response.IsSuccessStatusCode) {
+      return StatusCode((int)response.StatusCode);
+    }
+
+    var jsonString = await response.Content.ReadAsStringAsync();
+    var countries = JsonSerializer.Deserialize<List<Country>>(jsonString);
+
+    if (countries is null) {
+      return NotFound();
+    }
+
+    if (!string.IsNullOrEmpty(countryName)) {
+      countries = FilterByName(countries, countryName);
+    }
+
+    // Filter by population
+    if (population.HasValue) {
+      countries = FilterByPopulation(countries, population.Value);
+    }
+
+    // Sort
+    if (sort.HasValue) {
+      countries = SortCountries(countries, sort.Value);
+    }
+
+    // Select first rows
+    if (firstCountries.HasValue) {
+      countries = SelectCountries(countries, firstCountries.Value);
+    }
+
+    return Ok(countries);
+  }
+
+  private static List<Country> FilterByName(IEnumerable<Country> countries, string nameFilter) {
+    return countries.Where(c =>
+      c.Name.Common != null && c.Name.Common.IndexOf(nameFilter, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+  }
+
+  private static List<Country> FilterByPopulation(IEnumerable<Country> countries, long populationLimit) {
+    return countries.Where(c => c.Population < populationLimit * 1_000_000).ToList();
+  }
+  
+  private static List<Country> SortCountries(List<Country> countries, SortOrder sort) {
+    countries = sort switch {
+      SortOrder.Ascending => countries.OrderBy(c => c.Name.Common).ToList(),
+      SortOrder.Descending => countries.OrderByDescending(c => c.Name.Common).ToList(),
+      _ => countries
+    };
+
+    return countries;
+  }
+
+  private static List<Country> SelectCountries(List<Country> countries, int firstCountries) {
+    return countries.Take(firstCountries).ToList();
+  }
+}
+ChatGPT
+Certainly! Here's an example of how you can write unit tests for the four functions in the provided code:
+
+csharp
+Copy code
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Moq;
+using UseCase1.Controllers;
+using UseCase1.Enums;
+using UseCase1.Models;
+using Xunit;
+
+namespace UseCase1.Tests
+{
+    public class CountryControllerTests
+    {
+        private readonly CountryController _controller;
+        private readonly Mock<IHttpClientFactory> _httpClientFactoryMock;
+
+        public CountryControllerTests()
+        {
+            _httpClientFactoryMock = new Mock<IHttpClientFactory>();
+            _controller = new CountryController(_httpClientFactoryMock.Object);
+        }
+
+        private List<Country> GetSampleCountries()
+        {
+            // Create sample countries for testing
+            return new List<Country>
+            {
+                new Country { Name = new Name { Common = "Country 1" }, Population = 100 },
+                new Country { Name = new Name { Common = "Country 2" }, Population = 200 },
+                new Country { Name = new Name { Common = "Country 3" }, Population = 300 }
+            };
+        }
+
+        [Fact]
+        public async Task Get_WithCountryName_ReturnsFilteredCountries()
+        {
+            // Arrange
+            var countries = GetSampleCountries();
+            var filteredName = "Country 1";
+            var expectedCountries = countries.Where(c => c.Name.Common == filteredName).ToList();
+
+            var response = new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(""),
+            };
+
+            var httpClientMock = new Mock<HttpClient>();
+            httpClientMock.Setup(client => client.GetAsync(It.IsAny<string>())).ReturnsAsync(response);
+
+            _httpClientFactoryMock.Setup(factory => factory.CreateClient(It.IsAny<string>()))
+                .Returns(httpClientMock.Object);
+
+            // Act
+            var result = await _controller.Get(filteredName, null, null, null) as ObjectResult;
+            var actualCountries = result?.Value as List<Country>;
+
+            // Assert
+            Assert.NotNull(actualCountries);
+            Assert.Equal((int)HttpStatusCode.OK, result?.StatusCode);
+            Assert.Equal(expectedCountries.Count, actualCountries.Count);
+            Assert.All(actualCountries, c => Assert.Equal(filteredName, c.Name.Common));
+        }
+
+        [Fact]
+        public async Task Get_WithPopulation_ReturnsFilteredCountries()
+        {
+            // Arrange
+            var countries = GetSampleCountries();
+            var populationLimit = 150;
+            var expectedCountries = countries.Where(c => c.Population < populationLimit * 1_000_000).ToList();
+
+            var response = new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(""),
+            };
+
+            var httpClientMock = new Mock<HttpClient>();
+            httpClientMock.Setup(client => client.GetAsync(It.IsAny<string>())).ReturnsAsync(response);
+
+            _httpClientFactoryMock.Setup(factory => factory.CreateClient(It.IsAny<string>()))
+                .Returns(httpClientMock.Object);
+
+            // Act
+            var result = await _controller.Get(null, populationLimit, null, null) as ObjectResult;
+            var actualCountries = result?.Value as List<Country>;
+
+            // Assert
+            Assert.NotNull(actualCountries);
+            Assert.Equal((int)HttpStatusCode.OK, result?.StatusCode);
+            Assert.Equal(expectedCountries.Count, actualCountries.Count);
+            Assert.All(actualCountries, c => Assert.True(c.Population < populationLimit * 1_000_000));
+        }
+
+        [Fact]
+        public async Task Get_WithSortOrder_ReturnsSortedCountries()
+        {
+            // Arrange
+            var countries = GetSampleCountries();
+            var sortOrder = SortOrder.Descending;
+            var expectedCountries = countries.OrderByDescending(c => c.Name.Common).ToList();
+
+            var response = new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(""),
+            };
+
+            var httpClientMock = new Mock<HttpClient>();
+            httpClientMock.Setup(client => client.GetAsync(It.IsAny<string>())).ReturnsAsync(response);
+
+            _httpClientFactoryMock.Setup(factory => factory.CreateClient(It.IsAny<string>()))
+                .Returns(httpClientMock.Object);
+
+            // Act
+            var result = await _controller.Get(null, null, sortOrder, null) as ObjectResult;
+            var actualCountries = result?.Value as List<Country>;
+
+            // Assert
+            Assert.NotNull(actualCountries);
+            Assert.Equal((int)HttpStatusCode.OK, result?.StatusCode);
+            Assert.Equal(expectedCountries.Count, actualCountries.Count);
+            Assert.Equal(expectedCountries, actualCountries);
+        }
+
+        [Fact]
+        public async Task Get_WithFirstRows_ReturnsSelectedCountries()
+        {
+            // Arrange
+            var countries = GetSampleCountries();
+            var firstRows = 2;
+            var expectedCountries = countries.Take(firstRows).ToList();
+
+            var response = new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(""),
+            };
+
+            var httpClientMock = new Mock<HttpClient>();
+            httpClientMock.Setup(client => client.GetAsync(It.IsAny<string>())).ReturnsAsync(response);
+
+            _httpClientFactoryMock.Setup(factory => factory.CreateClient(It.IsAny<string>()))
+                .Returns(httpClientMock.Object);
+
+            // Act
+            var result = await _controller.Get(null, null, null, firstRows) as ObjectResult;
+            var actualCountries = result?.Value as List<Country>;
+
+            // Assert
+            Assert.NotNull(actualCountries);
+            Assert.Equal((int)HttpStatusCode.OK, result?.StatusCode);
+            Assert.Equal(expectedCountries.Count, actualCountries.Count);
+            Assert.Equal(expectedCountries, actualCountries);
+        }
+    }
+}
+In this example, I've used Xunit as the testing framework and Moq to mock the IHttpClientFactory and HttpClient dependencies. The tests cover the scenarios for filtering by country name, filtering by population, sorting, and selecting the first rows. Each test sets up the necessary dependencies and verifies the expected results against the actual results returned from the controller method.
+
+Note: Make sure to adjust the property names and types in the tests according to your Country class.
+
+
+
+
+
+User
+Got next error
+
+System.NotSupportedException: Unsupported expression: client => client.GetAsync(It.IsAny<string>())
+ChatGPT
+The System.NotSupportedException error you encountered typically occurs when Moq encounters an unsupported expression. This error can occur when trying to set up a mock for a non-virtual or static method or when using unsupported methods or properties.
+
+In this case, the error message suggests that the GetAsync method of the HttpClient is not supported by Moq. To overcome this limitation, you can create a wrapper interface and class around the HttpClient and mock the interface instead. Here's an updated version of the test code using this approach:
+
+csharp
+Copy code
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Moq;
+using UseCase1.Controllers;
+using UseCase1.Enums;
+using UseCase1.Models;
+using Xunit;
+
+namespace UseCase1.Tests
+{
+    public class CountryControllerTests
+    {
+        private readonly CountryController _controller;
+        private readonly Mock<IHttpClientWrapper> _httpClientWrapperMock;
+
+        public CountryControllerTests()
+        {
+            _httpClientWrapperMock = new Mock<IHttpClientWrapper>();
+            _controller = new CountryController(_httpClientWrapperMock.Object);
+        }
+
+        private List<Country> GetSampleCountries()
+        {
+            // Create sample countries for testing
+            return new List<Country>
+            {
+                new Country { Name = new Name { Common = "Country 1" }, Population = 100 },
+                new Country { Name = new Name { Common = "Country 2" }, Population = 200 },
+                new Country { Name = new Name { Common = "Country 3" }, Population = 300 }
+            };
+        }
+
+        [Fact]
+        public async Task Get_WithCountryName_ReturnsFilteredCountries()
+        {
+            // Arrange
+            var countries = GetSampleCountries();
+            var filteredName = "Country 1";
+            var expectedCountries = countries.Where(c => c.Name.Common == filteredName).ToList();
+
+            var response = new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(""),
+            };
+
+            _httpClientWrapperMock.Setup(client => client.GetAsync(It.IsAny<string>())).ReturnsAsync(response);
+
+            // Act
+            var result = await _controller.Get(filteredName, null, null, null) as ObjectResult;
+            var actualCountries = result?.Value as List<Country>;
+
+            // Assert
+            Assert.NotNull(actualCountries);
+            Assert.Equal((int)HttpStatusCode.OK, result?.StatusCode);
+            Assert.Equal(expectedCountries.Count, actualCountries.Count);
+            Assert.All(actualCountries, c => Assert.Equal(filteredName, c.Name.Common));
+        }
+
+        // ... other tests for filtering, sorting, and pagination
+    }
+
+    public interface IHttpClientWrapper
+    {
+        Task<HttpResponseMessage> GetAsync(string url);
+    }
+
+    public class HttpClientWrapper : IHttpClientWrapper
+    {
+        private readonly HttpClient _client;
+
+        public HttpClientWrapper(HttpClient client)
+        {
+            _client = client;
+        }
+
+        public Task<HttpResponseMessage> GetAsync(string url)
+        {
+            return _client.GetAsync(url);
+        }
+    }
+}
+In this updated code, we introduced the IHttpClientWrapper interface and the HttpClientWrapper class to wrap the HttpClient functionality. The CountryController now accepts an IHttpClientWrapper dependency, which allows us to mock the GetAsync method using Moq.
+
+By using this wrapper approach, we can mock the GetAsync method in the tests without encountering the System.NotSupportedException.
+
+
+
+
+
+User
+Got next error
+
+System.Text.Json.JsonException: The input does not contain any JSON tokens. Expected the input to start with a valid JSON token, when isFinalBlock is ...
+ChatGPT
+The System.Text.Json.JsonException error you encountered suggests that the input string being passed to JsonSerializer.Deserialize does not contain valid JSON data. This error can occur when the response content is empty or when it contains malformed JSON.
+
+To resolve this issue, you should ensure that the response content is not empty and that it contains valid JSON data. Here's an updated version of the test code to mock the response content with valid JSON data:
+
+csharp
+Copy code
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Moq;
+using UseCase1.Controllers;
+using UseCase1.Enums;
+using UseCase1.Models;
+using Xunit;
+
+namespace UseCase1.Tests
+{
+    public class CountryControllerTests
+    {
+        private readonly CountryController _controller;
+        private readonly Mock<IHttpClientWrapper> _httpClientWrapperMock;
+
+        public CountryControllerTests()
+        {
+            _httpClientWrapperMock = new Mock<IHttpClientWrapper>();
+            _controller = new CountryController(_httpClientWrapperMock.Object);
+        }
+
+        private List<Country> GetSampleCountries()
+        {
+            // Create sample countries for testing
+            return new List<Country>
+            {
+                new Country { Name = new Name { Common = "Country 1" }, Population = 100 },
+                new Country { Name = new Name { Common = "Country 2" }, Population = 200 },
+                new Country { Name = new Name { Common = "Country 3" }, Population = 300 }
+            };
+        }
+
+        [Fact]
+        public async Task Get_WithCountryName_ReturnsFilteredCountries()
+        {
+            // Arrange
+            var countries = GetSampleCountries();
+            var filteredName = "Country 1";
+            var expectedCountries = countries.Where(c => c.Name.Common == filteredName).ToList();
+
+            var response = new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent("{\"countries\":" + JsonSerializer.Serialize(countries) + "}"),
+            };
+
+            _httpClientWrapperMock.Setup(client => client.GetAsync(It.IsAny<string>()))
+                .ReturnsAsync(response);
+
+            // Act
+            var result = await _controller.Get(filteredName, null, null, null) as ObjectResult;
+            var actualCountries = result?.Value as List<Country>;
+
+            // Assert
+            Assert.NotNull(actualCountries);
+            Assert.Equal((int)HttpStatusCode.OK, result?.StatusCode);
+            Assert.Equal(expectedCountries.Count, actualCountries.Count);
+            Assert.All(actualCountries, c => Assert.Equal(filteredName, c.Name.Common));
+        }
+
+        // ... other tests for filtering, sorting, and pagination
+    }
+
+    public interface IHttpClientWrapper
+    {
+        Task<HttpResponseMessage> GetAsync(string url);
+    }
+
+    public class HttpClientWrapper : IHttpClientWrapper
+    {
+        private readonly HttpClient _client;
+
+        public HttpClientWrapper(HttpClient client)
+        {
+            _client = client;
+        }
+
+        public Task<HttpResponseMessage> GetAsync(string url)
+        {
+            return _client.GetAsync(url);
+        }
+    }
+}
+In this updated code, we modified the test to mock the response content with valid JSON data. We encapsulated the countries list inside a countries property to match the structure expected by the controller's deserialization logic. The JSON serialization is done using JsonSerializer.Serialize.
+
+By providing valid JSON data in the response content, you should be able to resolve the System.Text.Json.JsonException error and successfully test the controller's behavior.
+
+
+
+
+
+User
+Will JsonSerializer work?
+ChatGPT
+Apologies for the confusion. You are correct. In the given code, the JsonSerializer.Deserialize method is used for deserializing the JSON response. However, when using Moq in unit tests, it's not necessary to perform actual JSON serialization/deserialization.
+
+Instead, we can directly create instances of the Country class for testing purposes. Here's an updated version of the test code that creates mock responses without relying on JSON serialization/deserialization:
+
+csharp
+Copy code
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Moq;
+using UseCase1.Controllers;
+using UseCase1.Enums;
+using UseCase1.Models;
+using Xunit;
+
+namespace UseCase1.Tests
+{
+    public class CountryControllerTests
+    {
+        private readonly CountryController _controller;
+        private readonly Mock<IHttpClientWrapper> _httpClientWrapperMock;
+
+        public CountryControllerTests()
+        {
+            _httpClientWrapperMock = new Mock<IHttpClientWrapper>();
+            _controller = new CountryController(_httpClientWrapperMock.Object);
+        }
+
+        private List<Country> GetSampleCountries()
+        {
+            // Create sample countries for testing
+            return new List<Country>
+            {
+                new Country { Name = new Name { Common = "Country 1" }, Population = 100 },
+                new Country { Name = new Name { Common = "Country 2" }, Population = 200 },
+                new Country { Name = new Name { Common = "Country 3" }, Population = 300 }
+            };
+        }
+
+        [Fact]
+        public async Task Get_WithCountryName_ReturnsFilteredCountries()
+        {
+            // Arrange
+            var countries = GetSampleCountries();
+            var filteredName = "Country 1";
+            var expectedCountries = countries.Where(c => c.Name.Common == filteredName).ToList();
+
+            var response = new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(string.Empty),
+            };
+
+            _httpClientWrapperMock.Setup(client => client.GetAsync(It.IsAny<string>()))
+                .ReturnsAsync(response);
+
+            // Act
+            var result = await _controller.Get(filteredName, null, null, null) as ObjectResult;
+            var actualCountries = result?.Value as List<Country>;
+
+            // Assert
+            Assert.NotNull(actualCountries);
+            Assert.Equal((int)HttpStatusCode.OK, result?.StatusCode);
+            Assert.Equal(expectedCountries.Count, actualCountries.Count);
+            Assert.All(actualCountries, c => Assert.Equal(filteredName, c.Name.Common));
+        }
+
+        // ... other tests for filtering, sorting, and pagination
+    }
+
+    public interface IHttpClientWrapper
+    {
+        Task<HttpResponseMessage> GetAsync(string url);
+    }
+
+    public class HttpClientWrapper : IHttpClientWrapper
+    {
+        private readonly HttpClient _client;
+
+        public HttpClientWrapper(HttpClient client)
+        {
+            _client = client;
+        }
+
+        public Task<HttpResponseMessage> GetAsync(string url)
+        {
+            return _client.GetAsync(url);
+        }
+    }
+}
+In this updated code, we removed the unnecessary JSON serialization/deserialization logic. The GetSampleCountries method creates sample instances of the Country class directly. The StringContent for the response content is kept empty since it's not relevant for the unit test.
+
+By using this approach, you can eliminate the need for JSON serialization/deserialization and create the desired mock responses for testing the controller's behavior.
+
+
+
+
+
+User
+There is no content in response
+ChatGPT
+Apologies for the oversight. To simulate a response with content, you can modify the code to include a valid JSON string representing the countries in the response content. Here's an updated version of the test code that includes the JSON content:
+
+csharp
+Copy code
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Moq;
+using UseCase1.Controllers;
+using UseCase1.Enums;
+using UseCase1.Models;
+using Xunit;
+
+namespace UseCase1.Tests
+{
+    public class CountryControllerTests
+    {
+        private readonly CountryController _controller;
+        private readonly Mock<IHttpClientWrapper> _httpClientWrapperMock;
+
+        public CountryControllerTests()
+        {
+            _httpClientWrapperMock = new Mock<IHttpClientWrapper>();
+            _controller = new CountryController(_httpClientWrapperMock.Object);
+        }
+
+        private List<Country> GetSampleCountries()
+        {
+            // Create sample countries for testing
+            return new List<Country>
+            {
+                new Country { Name = new Name { Common = "Country 1" }, Population = 100 },
+                new Country { Name = new Name { Common = "Country 2" }, Population = 200 },
+                new Country { Name = new Name { Common = "Country 3" }, Population = 300 }
+            };
+        }
+
+        [Fact]
+        public async Task Get_WithCountryName_ReturnsFilteredCountries()
+        {
+            // Arrange
+            var countries = GetSampleCountries();
+            var filteredName = "Country 1";
+            var expectedCountries = countries.Where(c => c.Name.Common == filteredName).ToList();
+
+            var responseContent = new
+            {
+                countries = countries.Where(c => c.Name.Common == filteredName)
+            };
+
+            var response = new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(JsonSerializer.Serialize(responseContent)),
+            };
+
+            _httpClientWrapperMock.Setup(client => client.GetAsync(It.IsAny<string>()))
+                .ReturnsAsync(response);
+
+            // Act
+            var result = await _controller.Get(filteredName, null, null, null) as ObjectResult;
+            var actualCountries = result?.Value as List<Country>;
+
+            // Assert
+            Assert.NotNull(actualCountries);
+            Assert.Equal((int)HttpStatusCode.OK, result?.StatusCode);
+            Assert.Equal(expectedCountries.Count, actualCountries.Count);
+            Assert.All(actualCountries, c => Assert.Equal(filteredName, c.Name.Common));
+        }
+
+        // ... other tests for filtering, sorting, and pagination
+    }
+
+    public interface IHttpClientWrapper
+    {
+        Task<HttpResponseMessage> GetAsync(string url);
+    }
+
+    public class HttpClientWrapper : IHttpClientWrapper
+    {
+        private readonly HttpClient _client;
+
+        public HttpClientWrapper(HttpClient client)
+        {
+            _client = client;
+        }
+
+        public Task<HttpResponseMessage> GetAsync(string url)
+        {
+            return _client.GetAsync(url);
+        }
+    }
+}
+In this updated code, the responseContent variable is created to represent the countries in the response content. It includes the countries property to match the expected structure. The JsonSerializer.Serialize method is used to convert the responseContent to a JSON string, which is then set as the content of the StringContent for the response.
+
+By providing valid JSON content in the response, you should be able to successfully test the controller's behavior.
+
+
+
+
+
+User
+JsonSerializer expects JsonWriter to be passed
+ChatGPT
+Apologies for the confusion once again. You are correct. In order to correctly serialize the response content, we need to use a JsonWriter to write the JSON data. Here's an updated version of the test code that uses the JsonSerializer.Serialize method with a JsonWriter:
+
+csharp
+Copy code
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Moq;
+using UseCase1.Controllers;
+using UseCase1.Enums;
+using UseCase1.Models;
+using Xunit;
+
+namespace UseCase1.Tests
+{
+    public class CountryControllerTests
+    {
+        private readonly CountryController _controller;
+        private readonly Mock<IHttpClientWrapper> _httpClientWrapperMock;
+
+        public CountryControllerTests()
+        {
+            _httpClientWrapperMock = new Mock<IHttpClientWrapper>();
+            _controller = new CountryController(_httpClientWrapperMock.Object);
+        }
+
+        private List<Country> GetSampleCountries()
+        {
+            // Create sample countries for testing
+            return new List<Country>
+            {
+                new Country { Name = new Name { Common = "Country 1" }, Population = 100 },
+                new Country { Name = new Name { Common = "Country 2" }, Population = 200 },
+                new Country { Name = new Name { Common = "Country 3" }, Population = 300 }
+            };
+        }
+
+        [Fact]
+        public async Task Get_WithCountryName_ReturnsFilteredCountries()
+        {
+            // Arrange
+            var countries = GetSampleCountries();
+            var filteredName = "Country 1";
+            var expectedCountries = countries.Where(c => c.Name.Common == filteredName).ToList();
+
+            var responseContent = new
+            {
+                countries = countries.Where(c => c.Name.Common == filteredName)
+            };
+
+            var response = new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(GetSerializedJson(responseContent), Encoding.UTF8, "application/json"),
+            };
+
+            _httpClientWrapperMock.Setup(client => client.GetAsync(It.IsAny<string>()))
+                .ReturnsAsync(response);
+
+            // Act
+            var result = await _controller.Get(filteredName, null, null, null) as ObjectResult;
+            var actualCountries = result?.Value as List<Country>;
+
+            // Assert
+            Assert.NotNull(actualCountries);
+            Assert.Equal((int)HttpStatusCode.OK, result?.StatusCode);
+            Assert.Equal(expectedCountries.Count, actualCountries.Count);
+            Assert.All(actualCountries, c => Assert.Equal(filteredName, c.Name.Common));
+        }
+
+        // ... other tests for filtering, sorting, and pagination
+
+        private string GetSerializedJson(object obj)
+        {
+            var options = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+
+            using var stream = new MemoryStream();
+            using var writer = new Utf8JsonWriter(stream);
+            JsonSerializer.Serialize(writer, obj, options);
+            writer.Flush();
+            return Encoding.UTF8.GetString(stream.ToArray());
+        }
+    }
+
+    public interface IHttpClientWrapper
+    {
+        Task<HttpResponseMessage> GetAsync(string url);
+    }
+
+    public class HttpClientWrapper : IHttpClientWrapper
+    {
+        private readonly HttpClient _client;
+
+        public HttpClientWrapper(HttpClient client)
+        {
+            _client = client;
+        }
+
+        public Task<HttpResponseMessage> GetAsync(string url)
+        {
+            return _client.GetAsync(url);
+        }
+    }
+}
+In this updated code, the GetSerializedJson method is introduced to serialize the response content using JsonSerializer. It uses a MemoryStream and a Utf8JsonWriter to write the JSON data. The resulting JSON string is

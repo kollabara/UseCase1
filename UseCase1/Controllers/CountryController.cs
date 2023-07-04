@@ -8,10 +8,10 @@ namespace  UseCase1.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 public class CountryController : ControllerBase {
-  private readonly HttpClient _client;
+  private readonly IHttpClientWrapper _client;
 
-  public CountryController(IHttpClientFactory clientFactory) {
-    _client = clientFactory.CreateClient();
+  public CountryController(IHttpClientWrapper client) {
+    _client = client;
   }
 
   [HttpGet]
