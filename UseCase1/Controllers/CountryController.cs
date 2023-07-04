@@ -40,9 +40,7 @@ public class CountryController : ControllerBase {
 
     // Sort
     if (sort.HasValue) {
-      countries = sort == SortOrder.Ascending
-        ? countries.OrderBy(c => c.Population).ToList()
-        : countries.OrderByDescending(c => c.Population).ToList();
+      countries = SortCountries(countries, sort.Value);
     }
 
     // Select first rows
@@ -60,5 +58,15 @@ public class CountryController : ControllerBase {
 
   private static List<Country> FilterByPopulation(IEnumerable<Country> countries, long populationLimit) {
     return countries.Where(c => c.Population < populationLimit * 1_000_000).ToList();
+  }
+  
+  private static List<Country> SortCountries(List<Country> countries, SortOrder sort) {
+    countries = sort switch {
+      SortOrder.Ascending => countries.OrderBy(c => c.Name.Common).ToList(),
+      SortOrder.Descending => countries.OrderByDescending(c => c.Name.Common).ToList(),
+      _ => countries
+    };
+
+    return countries;
   }
 }
