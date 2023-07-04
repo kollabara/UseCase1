@@ -1,3 +1,4 @@
+#nullable enable
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 using UseCase1.Enums;
@@ -53,7 +54,7 @@ public class CountryController : ControllerBase {
 
   private static List<Country> FilterByName(IEnumerable<Country> countries, string nameFilter) {
     return countries.Where(c =>
-      c.Name.Common != null && c.Name.Common.IndexOf(nameFilter, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+      c.Name.Common != null && c.Name.Common.Contains(nameFilter, StringComparison.OrdinalIgnoreCase)).ToList();
   }
 
   private static List<Country> FilterByPopulation(IEnumerable<Country> countries, long populationLimit) {

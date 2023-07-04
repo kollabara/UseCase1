@@ -30,7 +30,7 @@ public class CountryControllerTests
         _controller = new CountryController(httpClientFactoryMock.Object);
     }
     
-    private string GetSerializedJson(object obj)
+    private static string GetSerializedJson(object obj)
     {
         var options = new JsonSerializerOptions
         {
