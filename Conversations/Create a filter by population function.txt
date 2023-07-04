@@ -1,0 +1,44 @@
+Create a function that accepts a number as an attribute and can filter by ` population `. 
+The filter should search for countries where the population is less than provided number from attributes in the millions of people (e.g., by providing value `10`, I should find countries with a population less than 10m)
+ChatGPT
+Sure, let's create an additional method that will filter the countries list by population. Here is the FilterByPopulation method:
+
+csharp
+Copy code
+private List<Country> FilterByPopulation(List<Country> countries, long populationLimit)
+{
+    return countries.Where(c => c.Population < (populationLimit * 1000000)).ToList();
+}
+This function takes in a list of countries and a population limit, and it returns a list of countries where the population is less than the provided limit. We multiply the limit by 1,000,000 because the limit is given in millions.
+
+Now you can use this function in your GetCountryData method like this:
+
+csharp
+Copy code
+[HttpGet("GetCountryData")]
+public async Task<IActionResult> GetCountryData(string countryName = null, long? populationLimit = null, SortOrder sort = SortOrder.Ascending, int firstRows = 10, string nameFilter = null)
+{
+    var httpClient = _httpClientFactory.CreateClient();
+    var response = await httpClient.GetAsync("https://restcountries.com/v3.1/all");
+
+    if (!response.IsSuccessStatusCode)
+    {
+        // Handle error...
+    }
+
+    var jsonString = await response.Content.ReadAsStringAsync();
+    var countries = JsonSerializer.Deserialize<List<Country>>(jsonString);
+
+    if (!string.IsNullOrEmpty(nameFilter))
+    {
+        countries = FilterByName(countries, nameFilter);
+    }
+
+    if (populationLimit.HasValue)
+    {
+        countries = FilterByPopulation(countries, populationLimit.Value);
+    }
+
+    // other code...
+}
+Now, when you call the GetCountryData endpoint with a populationLimit parameter, it will only return countries where the population is less than the provided limit (in millions).
