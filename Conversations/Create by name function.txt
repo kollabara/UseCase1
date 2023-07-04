@@ -1,0 +1,68 @@
+Create a function that accepts a string as a parameter and can filter by country `name/common
+It should be case insensitive
+Also filter should search for countries names that contains string from attributes (e.g. providing `st` as attribute I could find `Estonia`, providing `Sp` I could find `Spain`)
+ChatGPT
+To achieve this, you can update the GetCountryData method in your controller to accept an additional parameter nameFilter of type string.
+
+The nameFilter parameter will be used to filter the countries by their common name.
+
+Here's how to do it:
+
+csharp
+Copy code
+[HttpGet("GetCountryData")]
+public async Task<IActionResult> GetCountryData(string countryName = null, long? population = null, SortOrder sort = SortOrder.Ascending, int firstRows = 10, string nameFilter = null)
+{
+    var httpClient = _httpClientFactory.CreateClient();
+    var response = await httpClient.GetAsync("https://restcountries.com/v3.1/all");
+
+    if (!response.IsSuccessStatusCode)
+    {
+        // Handle error...
+    }
+
+    var jsonString = await response.Content.ReadAsStringAsync();
+    var countries = JsonSerializer.Deserialize<List<Country>>(
+
+
+
+
+User
+Make an additional method and use it 
+ChatGPT
+Sure, let's create an additional method that will filter the countries list by the name. Here is the FilterByName method:
+
+csharp
+Copy code
+private List<Country> FilterByName(List<Country> countries, string nameFilter)
+{
+    return countries.Where(c => c.Name.Common != null && c.Name.Common.IndexOf(nameFilter, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+}
+This function takes in a list of countries and a filter string, and it returns a list of countries where the common name contains the filter string. The comparison is case-insensitive.
+
+Now you can use this function in your GetCountryData method like this:
+
+csharp
+Copy code
+[HttpGet("GetCountryData")]
+public async Task<IActionResult> GetCountryData(string countryName = null, long? population = null, SortOrder sort = SortOrder.Ascending, int firstRows = 10, string nameFilter = null)
+{
+    var httpClient = _httpClientFactory.CreateClient();
+    var response = await httpClient.GetAsync("https://restcountries.com/v3.1/all");
+
+    if (!response.IsSuccessStatusCode)
+    {
+        // Handle error...
+    }
+
+    var jsonString = await response.Content.ReadAsStringAsync();
+    var countries = JsonSerializer.Deserialize<List<Country>>(jsonString);
+
+    if (!string.IsNullOrEmpty(nameFilter))
+    {
+        countries = FilterByName(countries, nameFilter);
+    }
+
+    // other code...
+}
+Now, when you call the GetCountryData endpoint with a nameFilter parameter, it will only return countries where the common name contains the filter string, and the comparison is case-insensitive.

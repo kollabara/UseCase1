@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 using UseCase1.Enums;
 using UseCase1.Models;
 
@@ -20,17 +21,17 @@ public class CountryController : ControllerBase
   {
     var response = await _client.GetAsync("https://restcountries.com/v3.1/all");
 
-    if (!response.IsSuccessStatusCode) {
-      return StatusCode((int)response.StatusCode);
+    if (!response.IsSuccessStatusCode)
+    {
+      // Handle error...
     }
-    
-    var content = await response.Content.ReadAsStringAsync();
-    var countries = System.Text.Json.JsonSerializer.Deserialize<List<Country>>(content);
 
-    // Filter by country name
+    var jsonString = await response.Content.ReadAsStringAsync();
+    var countries = JsonSerializer.Deserialize<List<Country>>(jsonString);
+
     if (!string.IsNullOrEmpty(countryName))
     {
-      countries = countries.Where(c => c.Name.Common == countryName).ToList();
+      countries = FilterByName(countries, countryName);
     }
 
     // Filter by population
@@ -54,5 +55,10 @@ public class CountryController : ControllerBase
     }
 
     return Ok(countries);
+  }
+  
+  private static List<Country> FilterByName(IEnumerable<Country> countries, string nameFilter)
+  {
+    return countries.Where(c => c.Name.Common != null && c.Name.Common.IndexOf(nameFilter, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
   }
 }
